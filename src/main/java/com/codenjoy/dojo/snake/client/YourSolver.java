@@ -69,8 +69,16 @@ public class YourSolver implements Solver<Board> {
     @Override
     public String get(Board board) {
         this.board = board;
+        fetchData();
+        return solve();
+    }
+
+    private void fetchData() {
         parseBoard();
         constructGraph();
+    }
+
+    private String solve() {
         List<Node<Point>> path = graph.DijkstraShortestPath(graph.getNode(Node.of(head)).get(),
                 graph.getNode(Node.of(apple)).get());
         return PointHelper.getDir(head, path.get(1).getObj()).toString();
