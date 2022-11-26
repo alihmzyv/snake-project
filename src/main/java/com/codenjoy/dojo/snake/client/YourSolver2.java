@@ -108,7 +108,6 @@ public class YourSolver2 implements Solver<Board> {
         this.apple = board.getApples().get(0);
         this.stone = board.getStones().get(0);
         this.head = board.getHead();
-        this.currDir = board.getSnakeDirection();
         this.snake = board.getSnake();
         this.emptyPoints = board.get(Elements.NONE);
         this.barriers = board.getBarriers();
