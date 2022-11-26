@@ -4,7 +4,6 @@ import com.codenjoy.dojo.services.Direction;
 import com.codenjoy.dojo.services.Point;
 import com.codenjoy.dojo.services.PointImpl;
 
-import java.sql.DriverManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -51,5 +50,16 @@ public interface PointHelper {
         else {
             return UP;
         }
+    }
+
+    static boolean isNeigbourOf(Point p1, Point p2) {
+        int p1X = p1.getX();
+        int p2X = p2.getX();
+        int p1Y = p2.getY();
+        int p2Y = p2.getY();
+        return ((p1X == p2X - 1) ||
+                (p1X == p2X + 1) ||
+                (p1Y == p2Y - 1) ||
+                (p1Y == p2Y + 1));
     }
 }

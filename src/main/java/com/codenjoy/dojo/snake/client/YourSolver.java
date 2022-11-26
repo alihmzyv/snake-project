@@ -49,6 +49,7 @@ import static com.codenjoy.dojo.snake.client.PointHelper.getNeighbours;
  */
 public class YourSolver implements Solver<Board> {
 
+
     public static void main(String[] args) {
         logger.info(String.format("RUN/TRY DATE/TIME: %s", LocalDateTime.now()));
         try {
@@ -70,6 +71,7 @@ public class YourSolver implements Solver<Board> {
     private Point apple;
     private Point stone;
     private Point head;
+    private Point neck;
     private List<Point> snake;
     private List<Point> emptyPoints;
     private List<Point> barriers;
@@ -116,7 +118,6 @@ public class YourSolver implements Solver<Board> {
         this.snake = board.getSnake();
         this.emptyPoints = board.get(Elements.NONE);
         this.barriers = board.getBarriers();
-        this.barriers.remove(head);
     }
 
     private void constructGraph() {
@@ -128,6 +129,17 @@ public class YourSolver implements Solver<Board> {
         addHead();
         addSnake();
         addStone();
+        System.out.println(graph.toString());
+    }
+
+    private void addNeck() {
+        this.neck = this.snake
+                .stream()
+                .filter(point -> PointHelper.isNeigbourOf(point, head))
+                .findAny()
+                .get();
+        graph.addVertex(neck);
+        graph.addEdge(neck, head);
     }
 
     private void addEmptyPoints() {
@@ -221,8 +233,10 @@ public class YourSolver implements Solver<Board> {
         else {
             logger.info("Going for stone");
         }
-        if (getNeighbours(point, dw, dh, boardSize, barriers).size() == 1 &&
-                !getNeighbours(point, dw, dh, boardSize, barriers).contains(head)) {
+        List<Point> obstacles = new ArrayList<>(barriers);
+        obstacles.remove(head);
+        if (getNeighbours(point, dw, dh, boardSize, obstacles).size() == 1 &&
+                !getNeighbours(point, dw, dh, boardSize, obstacles).contains(head)) {
             logger.info("The apple or stone is on the dead point. Not going..");
             return Optional.empty();
         }
@@ -230,48 +244,47 @@ public class YourSolver implements Solver<Board> {
                 .map(path -> graph.getEdgeTarget(path.getEdgeList().get(0)));
     }
 
-    public Optional<Point> getDirToFurthestEmptyPointNoStone(int pathLength) {
+    public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
         logger.info("Inside getDirToFurthestEmptyPointNoStone():");
+        addNeck();
         return allPaths.getAllPaths(
-                        Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
+                        Set.of(neck), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
                 .filter(path -> path.getLength() == pathLength)
                 .min(Comparator.comparing(path -> {
-                    int[] curvy = new int[]{0};
+                    AtomicInteger curvy = new AtomicInteger();
                     path.getEdgeList()
                             .forEach(edge -> {
                                 Point source = graph.getEdgeSource(edge);
                                 Point target = graph.getEdgeTarget(edge);
                                 if (source.getY() == target.getY()) {
-                                    curvy[0]++;
+                                    curvy.getAndIncrement();
                                 }
                                 else {
-                                    curvy[0]--;
+                                    curvy.getAndDecrement();
                                 }
                             });
-                    return curvy[0];
+                    return curvy.get();
                 }))
                 .map(path -> {
                     List<Point> vertices = path.getVertexList();
-                    Point nextPoint = path.getVertexList().get(1);
-                    logger.info(String.format("Path found (vertices): %s", vertices));
+                    Point nextPoint = path.getVertexList().get(2);
+                    logger.info(String.format("Path found (vertices, starting from snake piece one before head): %s", vertices));
                     logger.info(String.format("Point returned: %s", nextPoint));
                     logger.info("Leaving getDirToFurthestEmptyPointNoStone()...");
                     return nextPoint;
                 });
     }
 
-    public Optional<Point> getDirToFurthestEmptyPointWithStone(int pathLength) {
+    public Optional<Point> getDirToFurthestEmptyPointWithStone(Integer pathLength) {
         logger.info("Inside getDirToFurthestEmptyPointWithStone():");
         HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
         getNeighbours(stone, dw, dh, boardSize, barriers)
-                .forEach(neighbourPoint ->
-                {
-                    graph.addEdge(neighbourPoint, stone);
-                });
+                .forEach(neighbourPoint -> graph.addEdge(neighbourPoint, stone));
         availablePoints.add(stone);
+        addNeck();
         return allPaths.getAllPaths(
-                        Set.of(head), new HashSet<>(availablePoints), true, pathLength)
+                        Set.of(neck), new HashSet<>(availablePoints), true, pathLength)
                 .stream()
                 .filter(path -> path.getLength() == pathLength)
                 .min(Comparator.comparingInt(path -> {
@@ -291,8 +304,8 @@ public class YourSolver implements Solver<Board> {
                 }))
                 .map(path -> {
                     List<Point> vertices = path.getVertexList();
-                    Point nextPoint = path.getVertexList().get(1);
-                    logger.info(String.format("Path found (vertices): %s", vertices));
+                    Point nextPoint = path.getVertexList().get(2);
+                    logger.info(String.format("Path found (vertices, starting from snake piece one before head): %s", vertices));
                     logger.info(String.format("Point returned: %s", nextPoint));
                     logger.info("Leaving getDirToFurthestEmptyPointWithStone()...");
                     return nextPoint;
