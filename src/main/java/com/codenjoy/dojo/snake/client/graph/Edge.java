@@ -1,6 +1,6 @@
 package com.codenjoy.dojo.snake.client.graph;
 
-public class Edge<A> implements Comparable<Edge> {
+public class Edge<A> implements Comparable<Edge<A>> {
 
     Node<A> source;
     Node<A> destination;
