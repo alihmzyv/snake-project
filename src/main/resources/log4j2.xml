@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <property name="filePattern">logs/snake_solver_${date:yyyy-MM-dd}.log</property>
+        <property name="append">false</property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss} %t %-5level %logger{36} - %msg%n"/>
+        </Console>
+        <RollingFile
+                name="file"
+                fileName= "${filePattern}"
+                filePattern="%d${filePattern}"
+                ignoreExceptions="false">
+            <PatternLayout>
+                <Pattern>%d{HH:mm:ss} %logger{36} - %msg%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1"/>
+            </Policies>
+            <DefaultRolloverStrategy max="5" />
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Root level="all">
+            <AppenderRef ref="file"/>
+        </Root>
+    </Loggers>
+</Configuration>
