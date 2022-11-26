@@ -1,4 +1,4 @@
-package com.codenjoy.dojo.snake.client.graph;
+package com.codenjoy.dojo.snake.client;
 
 import com.codenjoy.dojo.services.Direction;
 import com.codenjoy.dojo.services.Point;

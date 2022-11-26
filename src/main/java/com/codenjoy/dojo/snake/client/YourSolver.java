@@ -29,21 +29,20 @@ import com.codenjoy.dojo.services.Dice;
 import com.codenjoy.dojo.services.Direction;
 import com.codenjoy.dojo.services.Point;
 import com.codenjoy.dojo.services.RandomDice;
-import com.codenjoy.dojo.snake.client.graph.PointHelper;
 import com.codenjoy.dojo.snake.model.Elements;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jgrapht.GraphPath;
-import org.jgrapht.alg.DijkstraShortestPath;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
+import org.jgrapht.alg.shortestpath.JohnsonShortestPaths;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.codenjoy.dojo.snake.client.graph.PointHelper.getNeighbours;
+import static com.codenjoy.dojo.snake.client.PointHelper.getNeighbours;
 
 /**
  * User: your name
@@ -76,7 +75,7 @@ public class YourSolver implements Solver<Board> {
     private List<Point> barriers;
     private DefaultDirectedGraph<Point, DefaultEdge> graph;
     private AllDirectedPaths<Point, DefaultEdge> allPaths;
-    private final Random rnd = new Random();
+    private JohnsonShortestPaths<Point, DefaultEdge> shortestPaths;
     private static final Logger logger = LogManager.getLogger("SnakeSolver");
 
     public YourSolver(Dice dice) {
@@ -117,11 +116,13 @@ public class YourSolver implements Solver<Board> {
         this.snake = board.getSnake();
         this.emptyPoints = board.get(Elements.NONE);
         this.barriers = board.getBarriers();
+        this.barriers.remove(head);
     }
 
     private void constructGraph() {
         this.graph = new DefaultDirectedGraph<>(DefaultEdge.class);
         this.allPaths = new AllDirectedPaths<>(graph);
+        this.shortestPaths = new JohnsonShortestPaths<>(graph);
         addEmptyPoints();
         addApple();
         addHead();
@@ -166,11 +167,18 @@ public class YourSolver implements Solver<Board> {
 
     private void addStone() {
         graph.addVertex(stone);
+        getNeighbours(stone, dw, dh, boardSize, barriers)
+                .forEach(neighbourPoint ->
+                {
+                    graph.addVertex(neighbourPoint);
+                    graph.addEdge(stone, neighbourPoint);
+                });
     }
 
     private String solve() {
         logger.info("Inside solve()");
         long startMilli = Instant.now().toEpochMilli();
+        logger.info(String.format("Solve started: %d epoc seconds", startMilli));
         Optional<Point> nextPoint = getNextPoint();
         if (nextPoint.isEmpty()) {
             String dir = Direction.random().toString();
@@ -179,17 +187,24 @@ public class YourSolver implements Solver<Board> {
         }
         String dir = PointHelper.getDir(head, nextPoint.get()).toString();
         logger.info(String.format("Final Direction found returned: %s", dir));
-        logger.info(String.format("Time it took: %8.5f seconds", (Instant.now().toEpochMilli() - startMilli) / 1000.0));
+        logger.info(String.format("Solve Finished. Time it took: %8.5f seconds", (Instant.now().toEpochMilli() - startMilli) / 1000.0));
         logger.info("Leaving solve()...");
         return dir;
     }
 
     private Optional<Point> getNextPoint() {
-        Optional<Point> pointChosen = getDirToApple();
+        Optional<Point> pointChosen;
+        if (snake.size() > 70) {
+            logger.info(String.format("Snake size was higher than 70: %d", snake.size()));
+            pointChosen = getDirToPoint(apple);
+        }
+        else {
+            pointChosen = getDirToPoint(apple);
+        }
         if (pointChosen.isEmpty()) {
-            pointChosen = getDirToFurthestEmptyPointNoStone();
+            pointChosen = getDirToFurthestEmptyPointNoStone(3);
             if (pointChosen.isEmpty()) {
-                pointChosen = getDirToFurthestEmptyPointWithStone();
+                pointChosen = getDirToFurthestEmptyPointWithStone(3);
                 if (pointChosen.isEmpty()) {
                     return Optional.empty();
                 }
@@ -198,28 +213,44 @@ public class YourSolver implements Solver<Board> {
         return pointChosen;
     }
 
-    public Optional<Point> getDirToApple() {
-        logger.info("Inside getDirToApple():");
-        DijkstraShortestPath<Point, DefaultEdge> path = new DijkstraShortestPath<>(graph, head, apple);
-        return Optional.ofNullable(path.getPathEdgeList())
-                .map(edgeList -> {
-                    logger.info(String.format("Edge list: %s\n", edgeList));
-                    return edgeList.get(0);
-                })
-                .map(edge -> {
-                    Point point = graph.getEdgeTarget(edge);
-                    logger.info(String.format("The point returned: %s", point));
-                    logger.info("Leaving getDirToApple()..");
-                    return point;
-                });
+    public Optional<Point> getDirToPoint(Point point) {
+        logger.info("Inside getDirToPoint():");
+        if (point.equals(apple)) {
+            logger.info("Going for apple..");
+        }
+        else {
+            logger.info("Going for stone");
+        }
+        if (getNeighbours(point, dw, dh, boardSize, barriers).size() == 1 &&
+                !getNeighbours(point, dw, dh, boardSize, barriers).contains(head)) {
+            logger.info("The apple or stone is on the dead point. Not going..");
+            return Optional.empty();
+        }
+        return Optional.ofNullable(shortestPaths.getPath(head, point))
+                .map(path -> graph.getEdgeTarget(path.getEdgeList().get(0)));
     }
 
-    public Optional<Point> getDirToFurthestEmptyPointNoStone() {
+    public Optional<Point> getDirToFurthestEmptyPointNoStone(int pathLength) {
         logger.info("Inside getDirToFurthestEmptyPointNoStone():");
         return allPaths.getAllPaths(
-                        Set.of(head), new HashSet<>(emptyPoints), true, null)
+                        Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
-                .max(Comparator.comparingInt(GraphPath::getLength))
+                .filter(path -> path.getLength() == pathLength)
+                .min(Comparator.comparing(path -> {
+                    int[] curvy = new int[]{0};
+                    path.getEdgeList()
+                            .forEach(edge -> {
+                                Point source = graph.getEdgeSource(edge);
+                                Point target = graph.getEdgeTarget(edge);
+                                if (source.getY() == target.getY()) {
+                                    curvy[0]++;
+                                }
+                                else {
+                                    curvy[0]--;
+                                }
+                            });
+                    return curvy[0];
+                }))
                 .map(path -> {
                     List<Point> vertices = path.getVertexList();
                     Point nextPoint = path.getVertexList().get(1);
@@ -230,14 +261,34 @@ public class YourSolver implements Solver<Board> {
                 });
     }
 
-    public Optional<Point> getDirToFurthestEmptyPointWithStone() {
+    public Optional<Point> getDirToFurthestEmptyPointWithStone(int pathLength) {
         logger.info("Inside getDirToFurthestEmptyPointWithStone():");
-        Set<Point> pointsAvailable = new HashSet<>(emptyPoints);
-        pointsAvailable.add(stone);
+        HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
+        getNeighbours(stone, dw, dh, boardSize, barriers)
+                .forEach(neighbourPoint ->
+                {
+                    graph.addEdge(neighbourPoint, stone);
+                });
+        availablePoints.add(stone);
         return allPaths.getAllPaths(
-                        Set.of(head), pointsAvailable, true, null)
+                        Set.of(head), new HashSet<>(availablePoints), true, pathLength)
                 .stream()
-                .max(Comparator.comparingInt(GraphPath::getLength))
+                .filter(path -> path.getLength() == pathLength)
+                .min(Comparator.comparingInt(path -> {
+                    AtomicInteger curvy = new AtomicInteger();
+                    path.getEdgeList()
+                            .forEach(edge -> {
+                                Point source = graph.getEdgeSource(edge);
+                                Point target = graph.getEdgeTarget(edge);
+                                if (source.getY() == target.getY()) {
+                                    curvy.getAndIncrement();
+                                }
+                                else {
+                                    curvy.getAndDecrement();
+                                }
+                            });
+                    return curvy.get();
+                }))
                 .map(path -> {
                     List<Point> vertices = path.getVertexList();
                     Point nextPoint = path.getVertexList().get(1);
