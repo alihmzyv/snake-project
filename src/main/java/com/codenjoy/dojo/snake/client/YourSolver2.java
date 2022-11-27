@@ -377,7 +377,9 @@ public class YourSolver2 implements Solver<Board> {
     private boolean isOnDeadPoint(Point point) {
         List<Point> allBarrierNeighbours = getNeighbours(point, null, true)
                 .stream()
-                .filter(point1 -> barriers.contains(point1) && !point1.equals(head))
+                .filter(point1 -> barriers.contains(point1) &&
+                        !point1.equals(head) &&
+                        !point1.equals(stone))
                 .toList();
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&
