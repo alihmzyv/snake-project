@@ -43,7 +43,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static com.codenjoy.dojo.snake.client.PointHelper.areParallel;
-import static com.codenjoy.dojo.snake.client.PointHelper.isNeigbourOf;
 
 /**
  * User: your name
@@ -178,11 +177,17 @@ public class YourSolver2 implements Solver<Board> {
 
     private Optional<Point> getNextPoint() {
         Optional<Point> pointChosen;
-        if (snake.size() < 60) {
-            logger.printf(Level.INFO, "Snake size was higher than 70: %d", snake.size());
+        if (snake.size() < 45) {
+            addWeightToEmptyPoints();
+            addWeightToHeadEdges();
             pointChosen = getDirToPoint(apple);
         }
         else {
+            logger.printf(Level.INFO, "Snake size was higher than 45: %d", snake.size());
+            addWeightToEmptyPoints();
+            addWeightToHeadEdges();
+            addStone();
+            addWeightToStoneEdges();
             pointChosen = getDirToPoint(stone);
         }
         if (pointChosen.isEmpty()) {
@@ -216,13 +221,7 @@ public class YourSolver2 implements Solver<Board> {
             return allEmptyNeighbours.stream()
                     .map(emptyNeighbour -> shortestPaths.getPath(head, emptyNeighbour))
                     .filter(Objects::nonNull)
-                    .max(Comparator.comparingInt(path -> {
-                        int flag = path.getLength();
-                        if (flag == 0) {
-                            flag = (int) path.getWeight();
-                        }
-                        return flag;
-                    }))
+                    .max(Comparator.comparingInt(path -> (int) path.getWeight()))
                     .map(path -> {
                         logger.printf(Level.INFO, "Path found: %s", path.getVertexList());
                         return graph.getEdgeTarget(path.getEdgeList().get(0));
@@ -239,12 +238,6 @@ public class YourSolver2 implements Solver<Board> {
                     logger.printf(Level.INFO, "Shortest path to apple: %s", path.getVertexList());
                     return graph.getEdgeTarget(path.getEdgeList().get(0));
                 });
-    }
-
-    private boolean isAttachedToSnake(Point point) {
-        List<Point> allNeighbours = getNeighbours(point, null, false);
-        allNeighbours.removeIf(point1 -> point1.equals(head));
-        return allNeighbours.stream().anyMatch(neighbourPoint -> snake.contains(neighbourPoint));
     }
 
     public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
@@ -311,7 +304,9 @@ public class YourSolver2 implements Solver<Board> {
         int sourceWeight = getNeighbours(
                 edgeSource, null, true).stream()
                 .mapToInt(neighbourPoint -> {
-                    if (barriers.contains(neighbourPoint)) {
+                    if (barriers.contains(neighbourPoint) &&
+                            !neighbourPoint.equals(head) &&
+                            !neighbourPoint.equals(head)) {
                         return 1;
                     }
                     return 0;
@@ -320,7 +315,9 @@ public class YourSolver2 implements Solver<Board> {
         int targetWeight = getNeighbours(
                 edgeTarget, null, true).stream()
                 .mapToInt(neighbourPoint -> {
-                    if (neighbourPoint.equals(stone) || snake.contains(neighbourPoint)) {
+                    if (barriers.contains(neighbourPoint) &&
+                            !neighbourPoint.equals(head) &&
+                            !neighbourPoint.equals(head)) {
                         return 1;
                     }
                     return 0;
@@ -372,7 +369,7 @@ public class YourSolver2 implements Solver<Board> {
         if (allNeighbours.contains(head)) {
             return false;
         }
-        else return getNeighbours(point, null, true)
+        else return allNeighbours
                 .stream()
                 .anyMatch(point1 -> snake.contains(point1) || walls.contains(point1));
     }
@@ -384,6 +381,7 @@ public class YourSolver2 implements Solver<Board> {
                 .toList();
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&
+                        new HashSet<>(snake).containsAll(allBarrierNeighbours) &&
                         areParallel(allBarrierNeighbours.get(0), allBarrierNeighbours.get(1)));
     }
 }

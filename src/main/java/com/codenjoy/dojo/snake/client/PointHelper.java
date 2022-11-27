@@ -60,12 +60,12 @@ public interface PointHelper {
     static boolean isNeigbourOf(Point p1, Point p2) {
         int p1X = p1.getX();
         int p2X = p2.getX();
-        int p1Y = p2.getY();
+        int p1Y = p1.getY();
         int p2Y = p2.getY();
-        return ((p1X == p2X - 1) ||
-                (p1X == p2X + 1) ||
-                (p1Y == p2Y - 1) ||
-                (p1Y == p2Y + 1));
+        return ((p1X == p2X - 1 && p1Y == p2Y) ||
+                (p1X == p2X + 1 && p1Y == p2Y) ||
+                (p1Y == p2Y - 1 && p1X == p2X) ||
+                (p1Y == p2Y + 1 && p1X == p2X));
     }
 
     static boolean areParallel(Point p1, Point p2) {
