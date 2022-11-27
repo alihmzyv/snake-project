@@ -371,7 +371,10 @@ public class YourSolver2 implements Solver<Board> {
         }
         else return allNeighbours
                 .stream()
-                .anyMatch(point1 -> snake.contains(point1) || walls.contains(point1));
+                .anyMatch(point1 -> snake.contains(point1)) &&
+                allNeighbours
+                        .stream()
+                        .noneMatch(point1 -> walls.contains(point1));
     }
 
     private boolean isOnDeadPoint(Point point) {
