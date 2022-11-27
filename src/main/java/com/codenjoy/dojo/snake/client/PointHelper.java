@@ -13,14 +13,19 @@ import static com.codenjoy.dojo.services.Direction.*;
 
 public interface PointHelper {
 
-    static List<Point> getNeighbours(Point point, int dw, int dh, int boardSize, List<Point> barriers) {
+    static List<Point> getNeighbours(Point point, int dw, int dh, int boardSize, List<Point> barriers, boolean outAllowed) {
         return Stream.of(change(point, UP),
                 change(point, DOWN),
                 change(point, RIGHT),
                 change(point, LEFT))
                 .filter(neighbourPoint ->
-                        (!neighbourPoint.isOutOf(dw, dh, boardSize)) &&
-                        !barriers.contains(neighbourPoint))
+                {
+                    if (outAllowed) {
+                        return (barriers == null || !barriers.contains(neighbourPoint));
+                    }
+                    return (!neighbourPoint.isOutOf(dw, dh, boardSize)) &&
+                            (barriers == null || !barriers.contains(neighbourPoint));
+                })
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -61,5 +66,14 @@ public interface PointHelper {
                 (p1X == p2X + 1) ||
                 (p1Y == p2Y - 1) ||
                 (p1Y == p2Y + 1));
+    }
+
+    static boolean areParallel(Point p1, Point p2) {
+        int p1X = p1.getX();
+        int p2X = p2.getX();
+        int p1Y = p1.getY();
+        int p2Y = p2.getY();
+        return p1X == p2X ||
+                p1Y == p2Y;
     }
 }
