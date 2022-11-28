@@ -33,8 +33,9 @@ import com.codenjoy.dojo.snake.model.Elements;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jgrapht.GraphPath;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
-import org.jgrapht.alg.shortestpath.JohnsonShortestPaths;
+import org.jgrapht.alg.shortestpath.BFSShortestPath;
 import org.jgrapht.graph.DefaultDirectedWeightedGraph;
 import org.jgrapht.graph.DefaultEdge;
 
@@ -43,6 +44,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static com.codenjoy.dojo.snake.client.PointHelper.areParallel;
+import static com.codenjoy.dojo.snake.model.Elements.*;
 
 /**
  * User: your name
@@ -76,7 +78,7 @@ public class YourSolver2 implements Solver<Board> {
     private List<Point> walls;
     private DefaultDirectedWeightedGraph<Point, DefaultEdge> graph;
     private AllDirectedPaths<Point, DefaultEdge> allPaths;
-    private JohnsonShortestPaths<Point, DefaultEdge> shortestPaths;
+    private BFSShortestPath<Point, DefaultEdge> shortestPaths;
     private static final Logger logger = LogManager.getLogger("SnakeSolver");
 
     public YourSolver2(Dice dice) {
@@ -94,8 +96,9 @@ public class YourSolver2 implements Solver<Board> {
         }
         catch (Exception exc) {
             logger.fatal(exc.getMessage());
-            logger.printf(Level.INFO, "Exception thrown in get(). RIGHT Dir. returned.");
-            logger.printf(Level.INFO, "Time it took: %8.5f seconds", (Instant.now().toEpochMilli() - start) / 1000.0);
+            logger.printf(Level.INFO,
+                    "Time it took: %8.5f seconds",
+                    (Instant.now().toEpochMilli() - start) / 1000.0);
             logger.printf(Level.INFO, "Leaving get(Board board)");
             return Direction.RIGHT.toString();
         }
@@ -116,17 +119,19 @@ public class YourSolver2 implements Solver<Board> {
         this.head = board.getHead();
         this.snake = board.getSnake();
         this.emptyPoints = board.get(Elements.NONE);
-        this.barriers = board.getBarriers();
+        this.barriers = board.getBarriers(); //includes walls, snake, stone
         this.walls = board.getWalls();
     }
 
     private void constructGraph() {
         this.graph = new DefaultDirectedWeightedGraph<>(DefaultEdge.class);
         this.allPaths = new AllDirectedPaths<>(graph);
-        this.shortestPaths = new JohnsonShortestPaths<>(graph);
+        this.shortestPaths = new BFSShortestPath<>(graph);
         addEmptyPoints();
+        addWeightToEmptyPoints();
         addApple();
         addHead();
+        addWeightToHeadEdges();
         addSnake();
     }
 
@@ -144,12 +149,24 @@ public class YourSolver2 implements Solver<Board> {
     private void addApple() {
         graph.addVertex(apple);
         getNeighbours(apple, barriers, false)
-                .forEach(neighbourPoint -> graph.addEdge(neighbourPoint, apple));
+                .forEach(neighbourPoint -> {
+                    graph.addEdge(neighbourPoint, apple);
+                    graph.addEdge(apple, neighbourPoint); //for the case going for stone
+                });
     }
 
     private void addHead() {
         graph.addVertex(head);
         getNeighbours(head, barriers, false)
+                .forEach(neighbourPoint -> graph.addEdge(head, neighbourPoint));
+    }
+
+    private void addHeadToStoneEdge() {
+        ArrayList<Point> obstacles = new ArrayList<>(barriers);
+        obstacles.remove(stone);
+        getNeighbours(head, obstacles, false)
+                .stream()
+                .filter(point -> point.equals(stone))
                 .forEach(neighbourPoint -> graph.addEdge(head, neighbourPoint));
     }
 
@@ -160,46 +177,53 @@ public class YourSolver2 implements Solver<Board> {
     private String solve() {
         logger.printf(Level.INFO, "Inside solve()");
         long startMilli = Instant.now().toEpochMilli();
-        logger.printf(Level.INFO, "Solve started: %d epoc seconds", startMilli);
+        logger.printf(Level.INFO, "Solution started at: %d epoc seconds", startMilli);
         Optional<Point> nextPoint = getNextPoint();
         if (nextPoint.isEmpty()) {
             String dir = Direction.random().toString();
-            logger.printf(Level.FATAL, "Final Random direction returned: %s", dir);
+            logger.printf(Level.FATAL, "Random result: %s", dir);
             return dir;
         }
-        String dir = PointHelper.getDir(head, nextPoint.get()).toString();
-        logger.printf(Level.INFO, "Final Direction found returned: %s", dir);
-        logger.printf(Level.INFO, "Solve Finished. Time it took: %8.5f seconds",
+        String dir = PointHelper.getDir(head, nextPoint.get()).toString(); //dir of nextPoint wrt. head
+        logger.printf(Level.INFO, "Result: %s", dir);
+        logger.printf(Level.INFO,
+                "Solution finished. Time it took: %8.5f seconds",
                 (Instant.now().toEpochMilli() - startMilli) / 1000.0);
         logger.printf(Level.INFO, "Leaving solve()...");
         return dir;
     }
 
     private Optional<Point> getNextPoint() {
-        Optional<Point> pointChosen;
-        if (snake.size() < 45) {
-            addWeightToEmptyPoints();
-            addWeightToHeadEdges();
-            pointChosen = getDirToPoint(apple);
+        Optional<Point> nextPoint;
+        Point pointChosen;
+        if (snake.size() < 60) {
+            pointChosen = apple;
         }
         else {
             logger.printf(Level.INFO, "Snake size was higher than 45: %d", snake.size());
-            addWeightToEmptyPoints();
-            addWeightToHeadEdges();
             addStone();
             addWeightToStoneEdges();
-            pointChosen = getDirToPoint(stone);
+            pointChosen = stone;
         }
-        if (pointChosen.isEmpty()) {
-            pointChosen = getDirToFurthestEmptyPointNoStone(15);
-            if (pointChosen.isEmpty()) {
-                pointChosen = getDirToFurthestEmptyPointWithStone(15);
-                if (pointChosen.isEmpty()) {
+        nextPoint = getDirToPoint(pointChosen);
+        if (nextPoint.isEmpty()) {
+            if (pointChosen.equals(apple)) {
+                nextPoint = getDirToFurthestEmptyPointNoStone(15);
+            }
+            else {
+                nextPoint = getDirToPoint(apple);
+                if (nextPoint.isEmpty()) {
+                    nextPoint = getDirToFurthestEmptyPointNoStone(15);
+                }
+            }
+            if (nextPoint.isEmpty()) {
+                nextPoint = getDirToFurthestEmptyPointWithStone(15);
+                if (nextPoint.isEmpty()) {
                     return Optional.empty();
                 }
             }
         }
-        return pointChosen;
+        return nextPoint;
     }
 
     public Optional<Point> getDirToPoint(Point point) {
@@ -209,6 +233,7 @@ public class YourSolver2 implements Solver<Board> {
         }
         else {
             logger.printf(Level.INFO, "Going for stone");
+            addHeadToStoneEdge();
         }
         if (isOnDeadPoint(point)) {
             logger.warn("The apple or stone is on a dead point. Wandering around..");
@@ -219,12 +244,20 @@ public class YourSolver2 implements Solver<Board> {
             List<Point> allEmptyNeighbours = getNeighbours(point, barriers, false);
             logger.printf(Level.INFO, "Empty neighbours of the point: %s", allEmptyNeighbours);
             return allEmptyNeighbours.stream()
-                    .map(emptyNeighbour -> shortestPaths.getPath(head, emptyNeighbour))
-                    .filter(Objects::nonNull)
+                    .map(emptyNeighbour -> {
+                        GraphPath<Point, DefaultEdge> path = shortestPaths.getPath(head, emptyNeighbour);
+                        if (path == null) {
+                            return null;
+                        }
+                        List<Point> vertexList = path.getVertexList();
+                        logger.printf(Level.INFO, "Path to empty neighbour of the point: %s", vertexList);
+                        return path;
+                    })
                     .max(Comparator.comparingInt(path -> (int) path.getWeight()))
                     .map(path -> {
-                        logger.printf(Level.INFO, "Path found: %s", path.getVertexList());
-                        return graph.getEdgeTarget(path.getEdgeList().get(0));
+                        List<Point> vertexList = path.getVertexList();
+                        logger.printf(Level.INFO, "Path to empty neighbour of the point, decided: %s", vertexList);
+                        return vertexList.get(1);
                     });
         }
         else {
@@ -233,64 +266,62 @@ public class YourSolver2 implements Solver<Board> {
     }
 
     private Optional<Point> getShortestPath(Point point) {
+        long startMilli = Instant.now().toEpochMilli();
+        logger.printf(Level.INFO, "JohnsonShortestPath started at %d seconds", startMilli);
         return Optional.ofNullable(shortestPaths.getPath(head, point))
                 .map(path -> {
-                    logger.printf(Level.INFO, "Shortest path to apple: %s", path.getVertexList());
-                    return graph.getEdgeTarget(path.getEdgeList().get(0));
+                    List<Point> vertexList = path.getVertexList();
+                    logger.printf(Level.INFO, "Shortest path to the point: %s", vertexList);
+                    logger.printf(Level.INFO,
+                            "JohnsonShortestPath took %8.5f seconds",
+                            (Instant.now().toEpochMilli() -  startMilli) / 1000.0);
+                    return vertexList.get(1);
                 });
     }
 
     public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
         logger.printf(Level.INFO, "Inside getDirToFurthestEmptyPointNoStone():");
-        addWeightToEmptyPoints();
-        addWeightToHeadEdges();
         return allPaths.getAllPaths(
                         Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
-                .max((path1, path2) -> {
+                .max(/*(path1, path2) -> {
                     int flag = path1.getLength() - path2.getLength();
                     if (flag == 0) {
                         flag =  (int) (path1.getWeight() - path2.getWeight());
                     }
                     return flag;
-                })
+                }*/Comparator.comparingInt(path -> (int) path.getWeight()))
                 .map(path -> {
-                    List<Point> vertices = path.getVertexList();
-                    logger.printf(Level.INFO, "Path found: %s", vertices);
-                    Point nextPoint = vertices.get(1);
-                    logger.printf(Level.INFO, "Point returned: %s", nextPoint);
+                    List<Point> vertexList = path.getVertexList();
+                    logger.printf(Level.INFO, "Path to furthest empty point, decided: %s", vertexList);
                     logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointNoStone()...");
-                    return path.getVertexList().get(1);
+                    return vertexList.get(1);
                 });
     }
 
     public Optional<Point> getDirToFurthestEmptyPointWithStone(Integer pathLength) {
         logger.printf(Level.INFO, "Inside getDirToFurthestEmptyPointWithStone():");
-        addWeightToEmptyPoints();
-        addWeightToHeadEdges();
-        addStone();
-        addWeightToStoneEdges();
+        if (!graph.containsVertex(stone)) {
+            addStone();
+            addWeightToStoneEdges();
+        }
         HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
-        getNeighbours(stone, barriers, false)
-                .forEach(neighbourPoint -> graph.addEdge(neighbourPoint, stone));
         availablePoints.add(stone);
         return allPaths.getAllPaths(
                         Set.of(head), new HashSet<>(availablePoints), true, pathLength)
                 .stream()
-                .max((path1, path2) -> {
+                .max(/*(path1, path2) -> {
                     int flag = path1.getLength() - path2.getLength();
                     if (flag == 0) {
                         flag =  (int) (path1.getWeight() - path2.getWeight());
                     }
                     return flag;
-                })
+                }*/Comparator.comparingInt(path -> (int) path.getWeight()))
                 .map(path -> {
-                    List<Point> vertices = path.getVertexList();
-                    logger.printf(Level.INFO, "Path found: %s", vertices);
-                    Point nextPoint = vertices.get(1);
-                    logger.printf(Level.INFO, "Point returned: %s", nextPoint);
+                    List<Point> vertexList = path.getVertexList();
+                    logger.printf(Level.INFO, "Path to furthest empty point (inc. stone in way) found: %s", vertexList);
                     logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointWithStone()...");
-                    return path.getVertexList().get(1);
+                    return vertexList.get(1);
                 });
     }
 
@@ -304,9 +335,9 @@ public class YourSolver2 implements Solver<Board> {
         int sourceWeight = getNeighbours(
                 edgeSource, null, true).stream()
                 .mapToInt(neighbourPoint -> {
-                    if (barriers.contains(neighbourPoint) &&
-                            !neighbourPoint.equals(head) &&
-                            !neighbourPoint.equals(head)) {
+                    if (/*barriers*/snake.contains(neighbourPoint) &&
+                            !neighbourPoint.equals(head)
+                            /*!neighbourPoint.equals(stone)*/) {
                         return 1;
                     }
                     return 0;
@@ -315,9 +346,9 @@ public class YourSolver2 implements Solver<Board> {
         int targetWeight = getNeighbours(
                 edgeTarget, null, true).stream()
                 .mapToInt(neighbourPoint -> {
-                    if (barriers.contains(neighbourPoint) &&
-                            !neighbourPoint.equals(head) &&
-                            !neighbourPoint.equals(head)) {
+                    if (/*barriers*/snake.contains(neighbourPoint) &&
+                            !neighbourPoint.equals(head)
+                            /*!neighbourPoint.equals(stone)*/) {
                         return 1;
                     }
                     return 0;
@@ -365,24 +396,36 @@ public class YourSolver2 implements Solver<Board> {
     }
 
     private boolean isRisky(Point point) {
+        if (snake.size() > 35) {
+            return true;
+        }
         List<Point> allNeighbours = getNeighbours(point, null, true);
+        List<Point> tails = board.get(
+                TAIL_END_DOWN,
+                TAIL_END_UP,
+                TAIL_END_LEFT,
+                TAIL_END_RIGHT,
+                TAIL_HORIZONTAL,
+                TAIL_LEFT_DOWN,
+                TAIL_LEFT_UP,
+                TAIL_RIGHT_DOWN,
+                TAIL_RIGHT_UP,
+                TAIL_VERTICAL);
+        System.out.println("Neighbours of the point checked for risk:AW87" + allNeighbours);
         if (allNeighbours.contains(head)) {
             return false;
         }
-        else return allNeighbours
-                .stream()
-                .anyMatch(point1 -> snake.contains(point1)) &&
-                allNeighbours
-                        .stream()
-                        .noneMatch(point1 -> walls.contains(point1));
+        else {
+            return allNeighbours.stream().anyMatch(point1 -> snake.contains(point1) /*&& !tails.contains(point1)*/); /*&&
+                    allNeighbours.stream().noneMatch(point1 -> walls.contains(point1) && !tails.contains(point1));*/
+        }
     }
 
     private boolean isOnDeadPoint(Point point) {
         List<Point> allBarrierNeighbours = getNeighbours(point, null, true)
                 .stream()
                 .filter(point1 -> barriers.contains(point1) &&
-                        !point1.equals(head) &&
-                        !point1.equals(stone))
+                        !point1.equals(head))
                 .toList();
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&

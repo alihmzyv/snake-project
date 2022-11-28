@@ -20,11 +20,11 @@ public interface PointHelper {
                 change(point, LEFT))
                 .filter(neighbourPoint ->
                 {
-                    if (outAllowed) {
+                    if (outAllowed) {//all the neighbours except barriers
                         return (barriers == null || !barriers.contains(neighbourPoint));
                     }
                     return (!neighbourPoint.isOutOf(dw, dh, boardSize)) &&
-                            (barriers == null || !barriers.contains(neighbourPoint));
+                            (barriers == null || !barriers.contains(neighbourPoint)); //excluding the walls as well
                 })
                 .collect(Collectors.toCollection(ArrayList::new));
     }
