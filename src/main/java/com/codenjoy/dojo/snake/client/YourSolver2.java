@@ -245,15 +245,18 @@ public class YourSolver2 implements Solver<Board> {
             logger.printf(Level.INFO, "Empty neighbours of the point: %s", allEmptyNeighbours);
             return allEmptyNeighbours.stream()
                     .map(emptyNeighbour -> {
-                        GraphPath<Point, DefaultEdge> path = shortestPaths.getPath(head, emptyNeighbour);
-                        if (path == null) {
-                            return null;
-                        }
-                        List<Point> vertexList = path.getVertexList();
-                        logger.printf(Level.INFO, "Path to empty neighbour of the point: %s", vertexList);
-                        return path;
+                        return shortestPaths.getPath(head, emptyNeighbour);
                     })
-                    .max(Comparator.comparingInt(path -> (int) path.getWeight()))
+                    .max(Comparator.comparingInt(path -> {
+                        if (path == null) {
+                            return - 1;
+                        }
+                        int weight = (int) path.getWeight();
+                        logger.printf(Level.INFO, "Path to empty neighbour of the point: %s. Weight: %d",
+                                path.getVertexList(),
+                                weight);
+                        return weight;
+                    }))
                     .map(path -> {
                         List<Point> vertexList = path.getVertexList();
                         logger.printf(Level.INFO, "Path to empty neighbour of the point, decided: %s", vertexList);
@@ -416,7 +419,7 @@ public class YourSolver2 implements Solver<Board> {
             return false;
         }
         else {
-            return allNeighbours.stream().anyMatch(point1 -> snake.contains(point1) /*&& !tails.contains(point1)*/); /*&&
+            return allNeighbours.stream().anyMatch(point1 -> snake.contains(point1) || walls.contains(point1) /*&& !tails.contains(point1)*/); /*&&
                     allNeighbours.stream().noneMatch(point1 -> walls.contains(point1) && !tails.contains(point1));*/
         }
     }
