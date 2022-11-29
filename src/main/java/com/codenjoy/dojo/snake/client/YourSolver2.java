@@ -429,7 +429,6 @@ public class YourSolver2 implements Solver<Board> {
                 .toList();
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&
-                        new HashSet<>(snake).containsAll(allBarrierNeighbours) &&
                         areParallel(allBarrierNeighbours.get(0), allBarrierNeighbours.get(1)));
     }
 }
