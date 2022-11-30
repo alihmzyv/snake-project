@@ -13,7 +13,7 @@ import static com.codenjoy.dojo.services.Direction.*;
 
 public interface PointHelper {
 
-    static List<Point> getNeighbours(Point point, int dw, int dh, int boardSize, List<Point> barriers, boolean outAllowed) {
+    static List<Point> getNeighbours4D(Point point, int dw, int dh, int boardSize, List<Point> barriers, boolean outAllowed) {
         return Stream.of(change(point, UP),
                 change(point, DOWN),
                 change(point, RIGHT),
@@ -28,6 +28,7 @@ public interface PointHelper {
                 })
                 .collect(Collectors.toCollection(ArrayList::new));
     }
+
 
     static Point change(Point point, Direction dir) {
         PointImpl pointCopy = new PointImpl(point);
@@ -75,5 +76,13 @@ public interface PointHelper {
         int p2Y = p2.getY();
         return p1X == p2X ||
                 p1Y == p2Y;
+    }
+
+    static double getDistanceBetween(Point p1, Point p2) {
+        int p1X = p1.getX();
+        int p2X = p2.getX();
+        int p1Y = p1.getY();
+        int p2Y = p2.getY();
+        return Math.sqrt(Math.pow((p1X - p2X), 2) + Math.pow((p1Y - p2Y), 2));
     }
 }

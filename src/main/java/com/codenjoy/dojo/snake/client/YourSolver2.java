@@ -33,7 +33,6 @@ import com.codenjoy.dojo.snake.model.Elements;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jgrapht.GraphPath;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 import org.jgrapht.alg.shortestpath.BFSShortestPath;
 import org.jgrapht.graph.DefaultDirectedWeightedGraph;
@@ -329,7 +328,7 @@ public class YourSolver2 implements Solver<Board> {
     }
 
     private List<Point> getNeighbours(Point point, List<Point> barriers, boolean outAllowed) {
-        return PointHelper.getNeighbours(point, dw, dh, boardSize, barriers, outAllowed);
+        return PointHelper.getNeighbours4D(point, dw, dh, boardSize, barriers, outAllowed);
     }
 
     private double calculateWeight(DefaultEdge edge) {
