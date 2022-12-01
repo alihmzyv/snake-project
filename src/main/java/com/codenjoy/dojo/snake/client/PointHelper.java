@@ -13,7 +13,7 @@ import static com.codenjoy.dojo.services.Direction.*;
 
 public interface PointHelper {
 
-    static List<Point> getNeighbours4D(Point point, int dw, int dh, int boardSize, List<Point> barriers, boolean outAllowed) {
+    static List<Point> getNeighbours(Point point, int dw, int dh, int boardSize, List<Point> barriers, boolean outAllowed) {
         return Stream.of(change(point, UP),
                 change(point, DOWN),
                 change(point, RIGHT),

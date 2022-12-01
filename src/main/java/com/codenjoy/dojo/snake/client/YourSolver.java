@@ -25,10 +25,7 @@ package com.codenjoy.dojo.snake.client;
 
 import com.codenjoy.dojo.client.Solver;
 import com.codenjoy.dojo.client.WebSocketRunner;
-import com.codenjoy.dojo.services.Dice;
-import com.codenjoy.dojo.services.Direction;
-import com.codenjoy.dojo.services.Point;
-import com.codenjoy.dojo.services.RandomDice;
+import com.codenjoy.dojo.services.*;
 import com.codenjoy.dojo.snake.model.Elements;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -44,7 +41,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static com.codenjoy.dojo.snake.client.GraphHelper.*;
-import static com.codenjoy.dojo.snake.client.PointHelper.*;
+import static com.codenjoy.dojo.snake.client.PointHelper.areParallel;
+import static com.codenjoy.dojo.snake.client.PointHelper.isNeigbourOf;
 
 /**
  * User: your name
@@ -69,14 +67,11 @@ public class YourSolver implements Solver<Board> {
     private int boardSize;
     private int dh;
     private int dw;
-    private int optimumSnakeSize = 35;
-    private int maxSnakeSize = 70;
-    private int optimumMaxPathLength = 15;
-
     private Point apple;
     private Point stone;
     private Point head;
     private List<Point> snake;
+    private final int maxSnakeSize = 60;
     private List<Point> emptyPoints;
     private List<Point> barriers;
     private static DefaultDirectedWeightedGraph<Point, DefaultEdge> graph;
@@ -109,7 +104,7 @@ public class YourSolver implements Solver<Board> {
         }
         catch (Exception exc) {
             exc.printStackTrace();
-            return Direction.RIGHT.toString();
+            return Direction.random().toString();
         }
     }
 
@@ -223,42 +218,35 @@ public class YourSolver implements Solver<Board> {
         Optional<Point> nextPoint = getNextPointFor(pointChosen);
         if (nextPoint.isEmpty()) {
             if (pointChosen.equals(apple)) {
-                logger.printf(Level.INFO, "There was no path to apple, wander around without eating stone..");
-                nextPoint = getDirToFurthestEmptyPointNoStone(optimumMaxPathLength);
+                nextPoint = getDirToFurthestEmptyPointNoStone(15);
             }
             else {
-                logger.printf(Level.INFO, "There was no path to stone, try going for apple..");
                 nextPoint = getNextPointFor(apple);
                 if (nextPoint.isEmpty()) {
-                    logger.printf(Level.INFO, "There was no path to apple either, wander around without eating stone..");
-                    nextPoint = getDirToFurthestEmptyPointNoStone(optimumMaxPathLength);
+                    nextPoint = getDirToFurthestEmptyPointNoStone(15);
                 }
             }
             if (nextPoint.isEmpty()) {
-                logger.printf(Level.INFO, "There was no path at all, wander around eating stone even !");
-                nextPoint = getDirToFurthestEmptyPointWithStone(optimumMaxPathLength);
+                nextPoint = getDirToFurthestEmptyPointWithStone(15);
             }
         }
         return getDirWrtHead(nextPoint.orElse(null));
     }
 
-    private String getDirWrtHead(Point neighbourOfHead) {
-        if (neighbourOfHead == null) {
-            logger.printf(Level.INFO, "There was no path found at all. RESULT WILL BE RANDOM!");
-            return Direction.random().toString();
-        }
-        return PointHelper.getDir(head, neighbourOfHead).toString();
-    }
-
     private Point chooseAppleOrStone() {
         if (snake.size() < maxSnakeSize) {
-            logger.printf(Level.INFO, "Apple was chosen.");
             return apple;
         }
         else {
-            logger.printf(Level.INFO, "Stone was chosen.");
             return stone;
         }
+    }
+
+    private String getDirWrtHead(Point neighbourOfHead) {
+        if (neighbourOfHead == null) {
+            return Direction.random().toString();
+        }
+        return PointHelper.getDir(head, neighbourOfHead).toString();
     }
 
     public Optional<Point> getNextPointFor(Point point) {
@@ -267,23 +255,15 @@ public class YourSolver implements Solver<Board> {
         }
 
         if (isNeigbourOf(head, point)) {//if head is near the point, eat it !
-            logger.printf(Level.INFO, "Apple or stone is the neighbour of head, EAT IT !");
             return Optional.of(point);
         }
         else if (isOnDeadPoint(point)) { //surrounded by 3 barriers
-            logger.printf(Level.INFO, "Apple or stone is on a dead point.");
             return Optional.empty();
         }
-        if (snake.size() >= optimumSnakeSize) {
-            logger.printf(Level.INFO, "Snake size is greater than the optimum size. Going for the lightest path to apple or stone");
-            Optional<Point> pointOpt = getLightestDirToEmptyNeighbourOfPoint(point);
-            if (pointOpt.isPresent()) {
-                return pointOpt;
-            }
-            return getShortestLightestDirToEmptyNeighbourOfPoint(point);
+        if (snake.size() > maxSnakeSize / 2) {
+            return getLightestDirToEmptyNeighbourOfPoint(point);
         }
         else {
-            logger.printf(Level.INFO, "Snake size is OK. Going for the shortest, lightest path to the apple or stone.");
             return getShortestLightestDirToEmptyNeighbourOfPoint(point);
         }
     }
@@ -295,121 +275,51 @@ public class YourSolver implements Solver<Board> {
         return allPaths.getAllPaths(Set.of(head),
                         new HashSet<>(emptyNeighbours),
                         true,
-                        optimumMaxPathLength)
+                        15)
                 .stream()
                 .min(Comparator.comparingInt(path -> (int) getPathWeight(path)))
                 .map(path -> {
-                    if (snake.size() >= optimumSnakeSize && pathIsDangerous(path)) {
-                        logger.printf(Level.WARN,
-                                "Path was dangerous.");
-                        logger.printf(Level.INFO,
-                                "Leaving getLightestDirToEmptyNeighbourOfPoint()");
-                        return null;
-                    }
                     List<Point> vertexList = getVertexList(path);
                     logger.printf(Level.INFO, "Chosen path: %s", vertexList);
-                    logger.printf(Level.INFO,
-                            "Inside getLightestDirToEmptyNeighbourOfPoint()");
                     return vertexList.get(1);
                 });
     }
 
     public Optional<Point> getShortestLightestDirToEmptyNeighbourOfPoint(Point point) {
-        logger.printf(Level.INFO, "Inside getShortestLightestDirToEmptyNeighbourOfPoint()");
         return getNeighbours(point, barriers, false)
                 .stream()
                 .map(emptyNeighbour -> shortestPaths.getPath(head, emptyNeighbour))
                 .filter(Objects::nonNull)
                 .min(Comparator.comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
-                        .thenComparingInt((GraphPath<Point, DefaultEdge> path) -> (int) getPathWeight(path)))
-                .map(path -> {
-                    if (snake.size() >= optimumSnakeSize && pathIsDangerous(path)) {
-                        logger.printf(Level.INFO,
-                                "Path was dangerous.");
-                        logger.printf(Level.INFO,
-                                "Leaving getShortestLightestDirToEmptyNeighbourOfPoint()");
-                        return null;
-                    }
-                    logger.printf(Level.INFO,
-                            "Leaving getShortestLightestDirToEmptyNeighbourOfPoint()");
-                    return getVertexList(path).get(1);
-                });
+                        .thenComparingDouble(GraphHelper::getPathWeight))
+                .map(path -> getVertexList(path).get(1));
     }
 
     public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
-        logger.printf(Level.INFO, "Inside getDirToFurthestEmptyPointNoStone()");
-        //find the empty point that is furthest and there is a path between head and that
-        Optional<Point> furthestAccessibleEmptyPoint = emptyPoints
-                .stream()
-                .filter(emptyPoint -> {
-                    GraphPath<Point, DefaultEdge> path = shortestPaths.getPath(head, emptyPoint);
-                    return path != null && (snake.size() < optimumSnakeSize || !pathIsDangerous(path)) && path.getLength() <= pathLength / 4;
-                })
-                .max(Comparator.comparingDouble(emptyPoint -> getDistanceBetween(head, emptyPoint)));
-        if (furthestAccessibleEmptyPoint.isEmpty()) {
-            logger.printf(Level.INFO, "There is no empty point or stone accessible.");
-            logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointNoStone()");
-            return Optional.empty();
-        }
         return allPaths.getAllPaths(
-                        head,
-                        furthestAccessibleEmptyPoint.get(),
-                        true,
-                        optimumMaxPathLength)
+                        Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
-                        .thenComparingInt(path -> - (int) getPathWeight(path)))
-                .map(path -> {
-                    if (snake.size() >= optimumSnakeSize && pathIsDangerous(path)) {
-                        logger.printf(Level.INFO, "Path was dangerous.");
-                        logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointNoStone()");
-                        return null;
-                    }
-                    logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointNoStone()");
-                    return getVertexList(path).get(1);
-                });
+                        .thenComparingDouble(path -> - getPathWeight(path)))
+                .map(path -> getVertexList(path).get(1));
     }
 
     public Optional<Point> getDirToFurthestEmptyPointWithStone(Integer pathLength) {
-        logger.printf(Level.INFO, "Inside getDirToFurthestEmptyPointWithStone()");
         addStone();
         HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
         availablePoints.add(stone);
-        Optional<Point> furthestAccessibleEmptyPoint = availablePoints
-                .stream()
-                .filter(emptyPoint -> {
-                    GraphPath<Point, DefaultEdge> path = shortestPaths.getPath(head, emptyPoint);
-                    return path != null && (snake.size() < optimumSnakeSize || !pathIsDangerous(path)) && path.getLength() <= pathLength / 4;
-                })
-                .max(Comparator.comparingDouble(emptyPoint -> getDistanceBetween(head, emptyPoint)));
-        if (furthestAccessibleEmptyPoint.isEmpty()) {
-            logger.printf(Level.INFO, "There is no empty point or stone accessible.");
-            logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointWithStone()");
-            return Optional.empty();
-        }
         return allPaths.getAllPaths(
-                        head,
-                        furthestAccessibleEmptyPoint.get(),
-                        true,
-                        optimumMaxPathLength)
+                        Set.of(head), new HashSet<>(availablePoints), true, pathLength)
                 .stream()
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
-                        .thenComparingInt(path -> - (int) getPathWeight(path)))
-                .map(path -> {
-                    if (snake.size() >= optimumSnakeSize && pathIsDangerous(path)) {
-                        logger.printf(Level.INFO, "Path was dangerous");
-                        logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointWithStone()");
-                        return null;
-                    }
-                    logger.printf(Level.INFO, "Leaving getDirToFurthestEmptyPointWithStone()");
-                    return getVertexList(path).get(1);
-                });
+                        .thenComparingDouble(path -> - getPathWeight(path)))
+                .map(path -> getVertexList(path).get(1));
     }
 
     private List<Point> getNeighbours(Point point, List<Point> barriers, boolean outAllowed) {
-        return PointHelper.getNeighbours4D(point, dw, dh, boardSize, barriers, outAllowed);
+        return PointHelper.getNeighbours(point, dw, dh, boardSize, barriers, outAllowed);
     }
 
     private boolean isOnDeadPoint(Point point) {
@@ -421,12 +331,5 @@ public class YourSolver implements Solver<Board> {
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&
                         areParallel(allBarrierNeighbours.get(0), allBarrierNeighbours.get(1)));
-    }
-
-    private boolean pathIsDangerous(GraphPath<Point, DefaultEdge> path) {
-        return path.getVertexList()
-                .stream()
-                .filter(point -> !point.equals(head))
-                .anyMatch(this::isOnDeadPoint);
     }
 }
