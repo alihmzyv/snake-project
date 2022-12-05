@@ -77,12 +77,4 @@ public interface PointHelper {
         return p1X == p2X ||
                 p1Y == p2Y;
     }
-
-    static double getDistanceBetween(Point p1, Point p2) {
-        int p1X = p1.getX();
-        int p2X = p2.getX();
-        int p1Y = p1.getY();
-        int p2Y = p2.getY();
-        return Math.sqrt(Math.pow((p1X - p2X), 2) + Math.pow((p1Y - p2Y), 2));
-    }
 }
