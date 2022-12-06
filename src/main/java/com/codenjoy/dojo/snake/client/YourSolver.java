@@ -55,7 +55,6 @@ import static com.codenjoy.dojo.snake.client.PointHelper.isNeigbourOf;
 public class YourSolver implements Solver<Board> {
 
     public static void main(String[] args) {
-        logger.printf(Level.INFO, "RUN/TRY DATE/TIME: %s", LocalDateTime.now());
         try {
             WebSocketRunner.runClient(
                     // paste here board page url from browser after registration
@@ -83,7 +82,6 @@ public class YourSolver implements Solver<Board> {
     private static DefaultDirectedWeightedGraph<Point, DefaultEdge> graph;
     private AllDirectedPaths<Point, DefaultEdge> allPaths;
     private BFSShortestPath<Point, DefaultEdge> shortestPaths;
-    private static final Logger logger = LogManager.getLogger("SnakeSolver");
 
     public YourSolver(Dice dice) {
         this.dice = dice;
@@ -91,26 +89,13 @@ public class YourSolver implements Solver<Board> {
 
     @Override
     public String get(Board board) {
-        long start = Instant.now().toEpochMilli();
-        logger.printf(Level.INFO,
-                "Solution started at %s", LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME));
-        logger.printf(Level.INFO,
-                board.toString());
         this.board = board;
         try {
             fetchData();
-            String result = solve();
-            logger.printf(Level.INFO,
-                    "Solution finished. Time it took: %6.4f",
-                    (Instant.now().toEpochMilli() - start) / 1000.0);
-            logger.printf(Level.INFO,
-                    "RESULT: %s",
-                    result);
-            return result;
+            return solve();
         }
         catch (Exception exc) {
             exc.printStackTrace();
-            logger.printf(Level.WARN, "RANDOM RESULT RETURNED");
             return Direction.random().toString();
         }
     }
@@ -237,11 +222,9 @@ public class YourSolver implements Solver<Board> {
 
     private Point chooseAppleOrStone() {
         if (snake.size() < maxSnakeSize) {
-            logger.warn("Apple chosen");
             return apple;
         }
         else {
-            logger.warn("Stone chosen");
             return stone;
         }
     }
@@ -263,7 +246,6 @@ public class YourSolver implements Solver<Board> {
         }
 
         if (isOnDeadPoint(point)) { //surrounded by 3 barriers
-            logger.warn("Point is on a dead point.");
             return Optional.empty();
         }
         return getShortestLightestDirToEmptyNeighbourOfPoint(point);
@@ -271,34 +253,25 @@ public class YourSolver implements Solver<Board> {
 
 
     public Optional<Point> getShortestLightestDirToEmptyNeighbourOfPoint(Point point) {
-        logger.info("Inside getShortestLightestDirToEmptyNeighbourOfPoint()...");
         return getNeighbours(point, barriers, false)
                 .stream()
                 .map(emptyNeighbour -> shortestPaths.getPath(head, emptyNeighbour))
                 .filter(Objects::nonNull)
                 .min(Comparator.comparingDouble(GraphHelper::getPathWeight))
-                .map(path -> {
-                    logger.info("Leaving getShortestLightestDirToEmptyNeighbourOfPoint()...");
-                    return getVertexList(path).get(1);
-                });
+                .map(path -> getVertexList(path).get(1));
     }
 
     public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
-        logger.info("Inside getDirToFurthestEmptyPointNoStone()...");
         return allPaths.getAllPaths(
                         Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
                         .thenComparingDouble(path -> - getPathWeight(path)))
-                .map(path -> {
-                    logger.info("Leaving getDirToFurthestEmptyPointNoStone()...");
-                    return getVertexList(path).get(1);
-                });
+                .map(path -> getVertexList(path).get(1));
     }
 
     public Optional<Point> getDirToFurthestEmptyPointWithStone(Integer pathLength) {
-        logger.info("Inside getDirToFurthestEmptyPointWithStone()...");
         addStone();
         HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
         availablePoints.add(stone);
@@ -308,10 +281,7 @@ public class YourSolver implements Solver<Board> {
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
                         .thenComparingDouble(path -> - getPathWeight(path)))
-                .map(path -> {
-                    logger.info("Leaving getDirToFurthestEmptyPointWithStone()...");
-                    return getVertexList(path).get(1);
-                });
+                .map(path -> getVertexList(path).get(1));
     }
 
     private List<Point> getNeighbours(Point point, List<Point> barriers, boolean outAllowed) {
