@@ -25,7 +25,10 @@ package com.codenjoy.dojo.snake.client;
 
 import com.codenjoy.dojo.client.Solver;
 import com.codenjoy.dojo.client.WebSocketRunner;
-import com.codenjoy.dojo.services.*;
+import com.codenjoy.dojo.services.Dice;
+import com.codenjoy.dojo.services.Direction;
+import com.codenjoy.dojo.services.Point;
+import com.codenjoy.dojo.services.RandomDice;
 import com.codenjoy.dojo.snake.model.Elements;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -38,6 +41,8 @@ import org.jgrapht.graph.DefaultEdge;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import static com.codenjoy.dojo.snake.client.GraphHelper.*;
@@ -67,11 +72,12 @@ public class YourSolver implements Solver<Board> {
     private int boardSize;
     private int dh;
     private int dw;
+    private int optimumPathLength = 15;
     private Point apple;
     private Point stone;
     private Point head;
     private List<Point> snake;
-    private final int maxSnakeSize = 60;
+    private final int maxSnakeSize = 70;
     private List<Point> emptyPoints;
     private List<Point> barriers;
     private static DefaultDirectedWeightedGraph<Point, DefaultEdge> graph;
@@ -87,7 +93,7 @@ public class YourSolver implements Solver<Board> {
     public String get(Board board) {
         long start = Instant.now().toEpochMilli();
         logger.printf(Level.INFO,
-                "Solution started");
+                "Solution started at %s", LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME));
         logger.printf(Level.INFO,
                 board.toString());
         this.board = board;
@@ -104,6 +110,7 @@ public class YourSolver implements Solver<Board> {
         }
         catch (Exception exc) {
             exc.printStackTrace();
+            logger.printf(Level.WARN, "RANDOM RESULT RETURNED");
             return Direction.random().toString();
         }
     }
@@ -186,31 +193,26 @@ public class YourSolver implements Solver<Board> {
     private double calculateWeight(DefaultEdge edge) {
         Point edgeSource = graph.getEdgeSource(edge);
         Point edgeTarget = graph.getEdgeTarget(edge);
-        int sourceWeight = getNeighbours(
-                edgeSource, null, true)
-                .stream()
-                .mapToInt(neighbourPoint -> {
-                    if (barriers.contains(neighbourPoint) &&
-                            !neighbourPoint.equals(head) &&
-                            !neighbourPoint.equals(stone)) {
-                        return 0;
-                    }
-                    return 1;
-                })
-                .sum();
-        int targetWeight = getNeighbours(
-                edgeTarget, null, true)
-                .stream()
-                .mapToInt(neighbourPoint -> {
-                    if (barriers.contains(neighbourPoint) &&
-                            !neighbourPoint.equals(head) &&
-                            !neighbourPoint.equals(stone)) {
-                        return 0;
-                    }
-                    return 1;
-                })
-                .sum();
+        double sourceWeight = evaluatePoint(edgeSource);
+        double targetWeight = evaluatePoint(edgeTarget);
         return sourceWeight + targetWeight;
+    }
+
+    private double evaluatePoint(Point point) {
+        return getNeighbours(
+                point, null, true)
+                .stream()
+                .mapToInt(neighbourPoint -> {
+                    if (snake.contains(neighbourPoint) &&
+                            !neighbourPoint.equals(head)) {
+                        return 0;
+                    }
+                    else if (barriers.contains(neighbourPoint) && !neighbourPoint.equals(stone)) {
+                        return 1;
+                    }
+                    return 2;
+                })
+                .sum();
     }
 
     private String solve() {
@@ -218,16 +220,16 @@ public class YourSolver implements Solver<Board> {
         Optional<Point> nextPoint = getNextPointFor(pointChosen);
         if (nextPoint.isEmpty()) {
             if (pointChosen.equals(apple)) {
-                nextPoint = getDirToFurthestEmptyPointNoStone(15);
+                nextPoint = getDirToFurthestEmptyPointNoStone(optimumPathLength);
             }
             else {
                 nextPoint = getNextPointFor(apple);
                 if (nextPoint.isEmpty()) {
-                    nextPoint = getDirToFurthestEmptyPointNoStone(15);
+                    nextPoint = getDirToFurthestEmptyPointNoStone(optimumPathLength);
                 }
             }
             if (nextPoint.isEmpty()) {
-                nextPoint = getDirToFurthestEmptyPointWithStone(15);
+                nextPoint = getDirToFurthestEmptyPointWithStone(optimumPathLength);
             }
         }
         return getDirWrtHead(nextPoint.orElse(null));
@@ -235,9 +237,11 @@ public class YourSolver implements Solver<Board> {
 
     private Point chooseAppleOrStone() {
         if (snake.size() < maxSnakeSize) {
+            logger.warn("Apple chosen");
             return apple;
         }
         else {
+            logger.warn("Stone chosen");
             return stone;
         }
     }
@@ -257,55 +261,44 @@ public class YourSolver implements Solver<Board> {
         if (isNeigbourOf(head, point)) {//if head is near the point, eat it !
             return Optional.of(point);
         }
-        else if (isOnDeadPoint(point)) { //surrounded by 3 barriers
+
+        if (isOnDeadPoint(point)) { //surrounded by 3 barriers
+            logger.warn("Point is on a dead point.");
             return Optional.empty();
         }
-        if (snake.size() > maxSnakeSize / 2) {
-            return getLightestDirToEmptyNeighbourOfPoint(point);
-        }
-        else {
-            return getShortestLightestDirToEmptyNeighbourOfPoint(point);
-        }
+        return getShortestLightestDirToEmptyNeighbourOfPoint(point);
     }
 
-    private Optional<Point> getLightestDirToEmptyNeighbourOfPoint(Point point) {
-        logger.printf(Level.INFO,
-                "Inside getLightestDirToEmptyNeighbourOfPoint()");
-        List<Point> emptyNeighbours = getNeighbours(point, barriers, false);
-        return allPaths.getAllPaths(Set.of(head),
-                        new HashSet<>(emptyNeighbours),
-                        true,
-                        15)
-                .stream()
-                .min(Comparator.comparingInt(path -> (int) getPathWeight(path)))
-                .map(path -> {
-                    List<Point> vertexList = getVertexList(path);
-                    logger.printf(Level.INFO, "Chosen path: %s", vertexList);
-                    return vertexList.get(1);
-                });
-    }
 
     public Optional<Point> getShortestLightestDirToEmptyNeighbourOfPoint(Point point) {
+        logger.info("Inside getShortestLightestDirToEmptyNeighbourOfPoint()...");
         return getNeighbours(point, barriers, false)
                 .stream()
                 .map(emptyNeighbour -> shortestPaths.getPath(head, emptyNeighbour))
                 .filter(Objects::nonNull)
-                .min(Comparator.comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
-                        .thenComparingDouble(GraphHelper::getPathWeight))
-                .map(path -> getVertexList(path).get(1));
+                .min(Comparator.comparingDouble(GraphHelper::getPathWeight))
+                .map(path -> {
+                    logger.info("Leaving getShortestLightestDirToEmptyNeighbourOfPoint()...");
+                    return getVertexList(path).get(1);
+                });
     }
 
     public Optional<Point> getDirToFurthestEmptyPointNoStone(Integer pathLength) {
+        logger.info("Inside getDirToFurthestEmptyPointNoStone()...");
         return allPaths.getAllPaths(
                         Set.of(head), new HashSet<>(emptyPoints), true, pathLength)
                 .stream()
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
                         .thenComparingDouble(path -> - getPathWeight(path)))
-                .map(path -> getVertexList(path).get(1));
+                .map(path -> {
+                    logger.info("Leaving getDirToFurthestEmptyPointNoStone()...");
+                    return getVertexList(path).get(1);
+                });
     }
 
     public Optional<Point> getDirToFurthestEmptyPointWithStone(Integer pathLength) {
+        logger.info("Inside getDirToFurthestEmptyPointWithStone()...");
         addStone();
         HashSet<Point> availablePoints = new HashSet<>(emptyPoints);
         availablePoints.add(stone);
@@ -315,7 +308,10 @@ public class YourSolver implements Solver<Board> {
                 .max(Comparator
                         .comparingInt((GraphPath<Point, DefaultEdge> path) -> getPathLength(path))
                         .thenComparingDouble(path -> - getPathWeight(path)))
-                .map(path -> getVertexList(path).get(1));
+                .map(path -> {
+                    logger.info("Leaving getDirToFurthestEmptyPointWithStone()...");
+                    return getVertexList(path).get(1);
+                });
     }
 
     private List<Point> getNeighbours(Point point, List<Point> barriers, boolean outAllowed) {
@@ -330,6 +326,7 @@ public class YourSolver implements Solver<Board> {
                 .toList();
         return allBarrierNeighbours.size() == 3 ||
                 (allBarrierNeighbours.size() == 2 &&
-                        areParallel(allBarrierNeighbours.get(0), allBarrierNeighbours.get(1)));
+                        areParallel(allBarrierNeighbours.get(0), allBarrierNeighbours.get(1)) &&
+                        (!allBarrierNeighbours.get(0).equals(stone) && !allBarrierNeighbours.get(1).equals(stone)));
     }
 }
