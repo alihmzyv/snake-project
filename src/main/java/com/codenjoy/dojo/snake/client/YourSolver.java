@@ -89,10 +89,13 @@ public class YourSolver implements Solver<Board> {
 
     @Override
     public String get(Board board) {
+        long startMilli = Instant.now().toEpochMilli();
         this.board = board;
         try {
             fetchData();
-            return solve();
+            String solution = solve();
+            System.out.printf("Solution took %8.5f seconds", (Instant.now().toEpochMilli() - startMilli) / 1000.0);
+            return solution;
         }
         catch (Exception exc) {
             exc.printStackTrace();
